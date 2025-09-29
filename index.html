@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>suho.fyi</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+      }
+
+      body {
+        background-color: black;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: "SF Mono", monospace;
+        font-weight: 300;
+        font-size: 1.6rem;
+        transition: background-color 0.3s ease;
+      }
+
+      a {
+        color: white;
+        text-decoration: none;
+        transition: color 0.3s ease;
+      }
+
+      a::after {
+        content: "suho.fyi";
+      }
+
+      a:hover::after {
+        content: "suho.dev";
+      }
+    </style>
+  </head>
+  <body>
+    <a href="https://suho.dev" target="_blank"></a>
+  </body>
+</html>
