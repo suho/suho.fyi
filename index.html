@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>suho.fyi</title>
+    <title>Cosmos - suho.fyi</title>
     <style>
       * {
         margin: 0;
@@ -15,36 +15,460 @@
       body {
         height: 100%;
         width: 100%;
+        background: #000;
       }
 
       body {
-        background-color: black;
         color: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
         font-family: "SF Mono", monospace;
         font-weight: 300;
-        font-size: 1.6rem;
-        transition: background-color 0.3s ease;
+        overflow: hidden;
       }
 
-      a {
-        color: white;
-        text-decoration: none;
-        transition: color 0.3s ease;
+      #canvas {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
       }
 
-      a::after {
-        content: "suho.fyi";
+      .ui {
+        position: fixed;
+        z-index: 20;
+        pointer-events: none;
+        font-size: 0.8rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
       }
 
-      a:hover::after {
-        content: "suho.dev";
+      .header {
+        top: 30px;
+        left: 30px;
+        text-align: left;
+      }
+
+      .title {
+        display: none;
+        font-size: 1.8rem;
+        margin-bottom: 8px;
+        letter-spacing: 2px;
+        background: linear-gradient(135deg, #00d4ff, #0099ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .subtitle {
+        opacity: 0.6;
+        font-size: 0.7rem;
+      }
+
+      .controls {
+        bottom: 30px;
+        left: 30px;
+        opacity: 0.5;
+        line-height: 1.6;
+      }
+
+      .controls span {
+        display: block;
+      }
+
+      .stats {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        text-align: right;
+        font-size: 0.7rem;
+        opacity: 0.5;
+      }
+
+      .fps {
+        margin-bottom: 10px;
       }
     </style>
   </head>
   <body>
-    <a href="https://suho.dev" target="_blank"></a>
+    <canvas id="canvas"></canvas>
+
+    <div class="ui header">
+      <div class="title">COSMOS</div>
+      <div class="subtitle">Interactive Visualization</div>
+    </div>
+
+    <div class="controls ui">
+      <span>🖱️ Click & Drag to rotate</span>
+      <span>🔍 Scroll to zoom</span>
+      <span>Space to reset</span>
+    </div>
+
+    <div class="stats ui">
+      <div class="fps">FPS: <span id="fps">60</span></div>
+      <div id="info">Loading...</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      // ==================== SCENE SETUP ====================
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100000
+      );
+      const canvas = document.getElementById('canvas');
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: true,
+      });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      const defaultDistance = 1000;
+      const minDistance = 100;
+      const maxDistance = 3200;
+      camera.position.set(0, 50, 80).normalize().multiplyScalar(defaultDistance);
+      camera.lookAt(0, 0, 0);
+
+      // ==================== CONTROLS ====================
+      let isDragging = false;
+      let previousMousePosition = { x: 0, y: 0 };
+      let cameraRotation = { x: 0, y: 0 };
+      const rotationSpeed = 0.005;
+
+      document.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+
+      // ==================== RAYCASTER FOR SUN CLICK ====================
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          const deltaX = e.clientX - previousMousePosition.x;
+          const deltaY = e.clientY - previousMousePosition.y;
+
+          cameraRotation.y += deltaX * rotationSpeed;
+          cameraRotation.x += deltaY * rotationSpeed;
+
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+        } else {
+          // Check for sun hover to change cursor
+          mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+          mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects([sun]);
+
+          if (intersects.length > 0) {
+            document.body.style.cursor = 'pointer';
+          } else {
+            document.body.style.cursor = 'default';
+          }
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+
+      // Sun click handler
+      document.addEventListener('click', (e) => {
+        if (isDragging) return;
+
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects([sun]);
+
+        if (intersects.length > 0) {
+          window.open('https://suho.dev', '_blank');
+        }
+      });
+
+      document.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomSpeed = 5;
+        const currentDistance = camera.position.length();
+        const newDistance = currentDistance * (1 + e.deltaY * 0.001 * zoomSpeed);
+        const clampedDistance = Math.max(minDistance, Math.min(maxDistance, newDistance));
+        camera.position.normalize().multiplyScalar(clampedDistance);
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          camera.position.set(0, 50, 80).normalize().multiplyScalar(defaultDistance);
+          cameraRotation = { x: 0, y: 0 };
+        }
+      });
+
+      // ==================== STARFIELD ====================
+      const starsGeometry = new THREE.BufferGeometry();
+      const starCount = 5000;
+      const starPositions = new Float32Array(starCount * 3);
+      const starColors = new Float32Array(starCount * 3);
+
+      for (let i = 0; i < starCount * 3; i += 3) {
+        const x = (Math.random() - 0.5) * 4000;
+        const y = (Math.random() - 0.5) * 4000;
+        const z = (Math.random() - 0.5) * 4000;
+
+        starPositions[i] = x;
+        starPositions[i + 1] = y;
+        starPositions[i + 2] = z;
+
+        const brightness = Math.random();
+        starColors[i] = brightness;
+        starColors[i + 1] = brightness;
+        starColors[i + 2] = brightness * 0.8 + 0.2;
+      }
+
+      starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+      starsGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+      const starsMaterial = new THREE.PointsMaterial({
+        size: 0.5,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+      });
+
+      const stars = new THREE.Points(starsGeometry, starsMaterial);
+      scene.add(stars);
+
+      // ==================== NEBULA CLOUDS ====================
+      function createNebula(x, y, z, color, size) {
+        const geometry = new THREE.BufferGeometry();
+        const particleCount = 800;
+        const positions = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount * 3; i += 3) {
+          const radius = Math.random() * size;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.random() * Math.PI;
+
+          positions[i] = x + Math.sin(phi) * Math.cos(theta) * radius;
+          positions[i + 1] = y + Math.cos(phi) * radius;
+          positions[i + 2] = z + Math.sin(phi) * Math.sin(theta) * radius;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const material = new THREE.PointsMaterial({
+          color: color,
+          size: 0.3,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.15,
+        });
+
+        const nebula = new THREE.Points(geometry, material);
+        scene.add(nebula);
+        return nebula;
+      }
+
+      // Nebula clouds removed for cleaner visualization
+
+      // ==================== CELESTIAL BODIES ====================
+      const celestialBodies = [];
+
+      function createPlanet(x, y, z, radius, color, name) {
+        const geometry = new THREE.SphereGeometry(radius, 32, 32);
+        const material = new THREE.MeshStandardMaterial({
+          color: color,
+          metalness: 0.3,
+          roughness: 0.4,
+          emissive: new THREE.Color(color).multiplyScalar(0.2),
+        });
+        const planet = new THREE.Mesh(geometry, material);
+        planet.position.set(x, y, z);
+        planet.userData = { name, radius, speed: Math.random() * 0.01 };
+        scene.add(planet);
+        celestialBodies.push(planet);
+        return planet;
+      }
+
+      // Planets removed for cleaner visualization
+
+      // ==================== SUN ====================
+      const sunGeometry = new THREE.SphereGeometry(80, 32, 32);
+      const sunMaterial = new THREE.MeshBasicMaterial({
+        color: 0xfdb813,
+      });
+      const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+      sun.position.set(0, 0, 0);
+      sun.userData = { isSun: true };
+      scene.add(sun);
+      celestialBodies.push(sun);
+
+      // Create sun glow effect
+      const glowGeometry = new THREE.SphereGeometry(90, 32, 32);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xfdb813,
+        transparent: true,
+        opacity: 0.15,
+      });
+      const sunGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+      sunGlow.position.set(0, 0, 0);
+      scene.add(sunGlow);
+
+      // Create corona effect with rotating rings
+      const coronaGeometry = new THREE.BufferGeometry();
+      const coronaParticles = 500;
+      const coronaPositions = new Float32Array(coronaParticles * 3);
+      for (let i = 0; i < coronaParticles * 3; i += 3) {
+        const radius = 95 + Math.random() * 20;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        coronaPositions[i] = Math.sin(phi) * Math.cos(theta) * radius;
+        coronaPositions[i + 1] = Math.cos(phi) * radius;
+        coronaPositions[i + 2] = Math.sin(phi) * Math.sin(theta) * radius;
+      }
+      coronaGeometry.setAttribute('position', new THREE.BufferAttribute(coronaPositions, 3));
+      const coronaMaterial = new THREE.PointsMaterial({
+        color: 0xff6600,
+        size: 2,
+        transparent: true,
+        opacity: 0.6,
+      });
+      const corona = new THREE.Points(coronaGeometry, coronaMaterial);
+      scene.add(corona);
+
+      // ==================== EARTH ====================
+      // Create a canvas texture for Earth with procedural generation
+      const earthCanvas = document.createElement('canvas');
+      earthCanvas.width = 1024;
+      earthCanvas.height = 512;
+      const earthCtx = earthCanvas.getContext('2d');
+
+      // Water (ocean blue)
+      earthCtx.fillStyle = '#1a4d7a';
+      earthCtx.fillRect(0, 0, earthCanvas.width, earthCanvas.height);
+
+      // Add continents (land masses)
+      earthCtx.fillStyle = '#2d5016';
+      // North America
+      earthCtx.fillRect(50, 125, 150, 100);
+      // South America
+      earthCtx.fillRect(100, 225, 75, 100);
+      // Europe & Africa
+      earthCtx.fillRect(300, 100, 250, 200);
+      // Asia
+      earthCtx.fillRect(500, 75, 300, 175);
+      // Australia
+      earthCtx.fillRect(675, 250, 75, 75);
+      // Antarctica
+      earthCtx.fillRect(0, 350, earthCanvas.width, 162);
+
+      // Add clouds (semi-transparent white)
+      earthCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      for (let i = 0; i < 80; i++) {
+        const x = Math.random() * earthCanvas.width;
+        const y = Math.random() * earthCanvas.height;
+        const size = Math.random() * 25 + 5;
+        earthCtx.beginPath();
+        earthCtx.arc(x, y, size, 0, Math.PI * 2);
+        earthCtx.fill();
+      }
+
+      const earthTexture = new THREE.CanvasTexture(earthCanvas);
+      const earthGeometry = new THREE.SphereGeometry(50, 64, 64);
+      const earthMaterial = new THREE.MeshStandardMaterial({
+        map: earthTexture,
+        roughness: 0.6,
+        metalness: 0.1,
+      });
+      const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+      earth.position.set(600, 0, 0); // Position around the sun
+      earth.userData = {
+        orbitRadius: 600,
+        orbitSpeed: 0.001,
+        orbitAngle: 0,
+        rotationSpeed: 0.01
+      };
+      scene.add(earth);
+
+      // Create orbital path indicator
+      const orbitGeometry = new THREE.BufferGeometry();
+      const orbitPoints = [];
+      for (let i = 0; i <= 64; i++) {
+        const angle = (i / 64) * Math.PI * 2;
+        const x = Math.cos(angle) * 600;
+        const z = Math.sin(angle) * 600;
+        orbitPoints.push(new THREE.Vector3(x, 0, z));
+      }
+      orbitGeometry.setFromPoints(orbitPoints);
+      const orbitMaterial = new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.3 });
+      const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+      scene.add(orbitLine);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+      scene.add(ambientLight);
+
+      const sunLight = new THREE.PointLight(0xfdb813, 2, 2000);
+      sunLight.position.set(0, 0, 0);
+      scene.add(sunLight);
+
+      // ==================== ANIMATION ====================
+      let frameCount = 0;
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        frameCount++;
+
+        const deltaTime = clock.getDelta();
+
+        // Update camera position based on rotation
+        const distance = camera.position.length();
+        camera.position.x = distance * Math.sin(cameraRotation.y) * Math.cos(cameraRotation.x);
+        camera.position.y = distance * Math.sin(cameraRotation.x);
+        camera.position.z = distance * Math.cos(cameraRotation.y) * Math.cos(cameraRotation.x);
+        camera.lookAt(0, 0, 0);
+
+        // Animate sun
+        sun.rotation.y += 0.0005;
+        corona.rotation.y += 0.0003;
+        sunGlow.rotation.x += 0.0002;
+
+        // Animate Earth
+        earth.userData.orbitAngle += earth.userData.orbitSpeed;
+        earth.position.x = Math.cos(earth.userData.orbitAngle) * earth.userData.orbitRadius;
+        earth.position.z = Math.sin(earth.userData.orbitAngle) * earth.userData.orbitRadius;
+        earth.rotation.y += earth.userData.rotationSpeed;
+
+        // Update stars
+        stars.rotation.x += 0.00001;
+        stars.rotation.y += 0.00002;
+
+        renderer.render(scene, camera);
+
+        // Update FPS and info
+        if (frameCount % 30 === 0) {
+          const fps = Math.round(1 / deltaTime);
+          document.getElementById('fps').textContent = fps;
+        }
+        if (frameCount === 1) {
+          document.getElementById('info').textContent = `Bodies: ${celestialBodies.length} | Distance: ${Math.round(camera.position.length())}`;
+        }
+        if (frameCount % 60 === 0) {
+          document.getElementById('info').textContent = `Bodies: ${celestialBodies.length} | Distance: ${Math.round(camera.position.length())}`;
+        }
+      }
+
+      animate();
+
+      // ==================== RESIZE HANDLER ====================
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
   </body>
 </html>
